@@ -1,178 +1,186 @@
-# Page Versioner (Chrome Extension, MV3)
+# FormTime Machine (Chrome Extension, Manifest V3)
 
-Page Versioner is a **local-first snapshot-and-restore tool** for page forms and editable content.
+FormTime Machine is a local-first Chrome extension for saving and restoring form state on web pages. It captures text fields, textareas, selects, checkbox/radio states, and contenteditable blocks so you can return to earlier drafts quickly.
 
-It lets you save the current tab as a named version and later restore those values on the same site/page family (great for LinkedIn/profile/job-application style workflows).
+> FormTime Machine is a page/form snapshot tool, not a full browser history time machine.
 
-> Important: this extension is **not** a full browser time machine. It restores form/editable DOM values only.
+## What it does
+
+- Saves a complete form snapshot from the current tab.
+- Stores snapshots locally in `chrome.storage.local`.
+- Supports snapshot title + comma-separated tags.
+- Lets you search and filter by title, domain, page title, and tags.
+- Restores saved values with matching fallbacks.
+- Exports/imports snapshots as JSON backups.
 
 ## Features
 
-- Save current page state as a named version
-- List saved versions filtered to current origin + path similarity
-- Restore any saved version
-- Delete saved versions
-- Restore latest version quickly
-- Search versions by label
-- Export all snapshots as JSON
-- Import snapshots from JSON with schema validation + merge/dedupe
-- Local storage only (`chrome.storage.local`)
-- Optional quick-save keyboard shortcut (`Ctrl/Cmd + Shift + S`)
+- Save snapshot with status states: **Save Version → Saving... → Saved / Failed**.
+- Domain-aware cards showing title, hostname, path/URL details, and timestamp.
+- Tags normalized to lowercase and deduplicated.
+- Restore report with restored/missing/skipped counts and warnings.
+- Lightweight delete confirmation flow.
+- Backup export file naming: `formtime-machine-backup-YYYY-MM-DD.json`.
+- Safe blocked-page handling for unsupported URLs (like `chrome://extensions`).
 
-## Architecture Notes (v1)
+## Install
 
-### Components
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Build TypeScript:
+   ```bash
+   npm run build
+   ```
 
-- `manifest.json`
-- `src/background.ts` (MV3 service worker)
-- `src/popup.html` + `src/popup.ts`
-- `src/content/capture.ts` (capture logic injected via `chrome.scripting.executeScript`)
-- `src/content/restore.ts` (restore logic injected via `chrome.scripting.executeScript`)
-- Shared helpers in `src/shared/*`
-- Styling in `styles/popup.css`
+## Load unpacked extension in Chrome
 
-### Data model
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Click **Load unpacked**.
+4. Select this project folder.
+5. Pin **FormTime Machine** from the extensions menu.
 
-Snapshots are stored as:
+## How to use
 
-```ts
-{
-  snapshots: PageSnapshot[]
-}
-```
+1. Open a normal `http://` or `https://` page with form fields.
+2. Open the FormTime Machine popup.
+3. Fill optional **Title** and **Tags**.
+4. Click **Save Version**.
+5. Use **Restore** on any snapshot card to apply values back to the page.
+6. Use **Export JSON** / **Import JSON** to back up or restore local snapshots.
 
-Each snapshot includes metadata + captured fields:
+## Testing on simple forms
 
-- `id`, `label`, `createdAt`
-- page details (`pageTitle`, `url`, `origin`, `path`, `hostname`)
-- scroll (`scrollX`, `scrollY`)
-- `domFingerprint`
-- `fields[]` with selector clues and values
+- Use any simple page containing `input`, `textarea`, `select`, and `checkbox`.
+- Fill values, save a snapshot, change values, then restore.
 
-### Capture strategy
+## Testing on LinkedIn-like pages
 
-Captured elements:
-
-- `input` (excluding password/file)
-- `textarea`
-- `select`
-- checkbox/radio checked state
-- `[contenteditable="true"]`
-
-Matching clues per field include:
-
-- selector (best effort)
-- id/name
-- aria-label/placeholder
-- label text
-- domPath fallback
-
-### Restore strategy
-
-Restore matching priority:
-
-1. saved selector
-2. id
-3. name
-4. aria-label
-5. placeholder
-6. label text
-7. domPath
-
-After applying values, extension dispatches `input` + `change` events and restores scroll position. For SPAs, restore waits briefly (bounded observer up to ~3s) for DOM stabilization.
-
-## Privacy & Security
-
-- Local-only persistence in extension storage
-- No analytics, telemetry, or remote backend
-- No password value capture
-- No file input value capture
-- No hidden exfiltration behavior
+- Open a dynamic SPA page with editable profile-like inputs.
+- Save a snapshot, navigate/edit, then restore.
+- Some custom editors may restore partially; restore summary reports missing fields.
 
 ## Limitations
 
-- Does **not** restore server-side state
-- Does **not** restore auth/session state
-- Does **not** restore file inputs
-- DOM changes between save/restore can reduce match quality
-- Cross-origin iframe internals are not captured
-- Complex custom editors may restore partially
+- Not a full browser time machine.
+- Cannot restore password values.
+- Cannot restore file input values.
+- Cannot restore server-side state.
+- DOM changes between save/restore can reduce restore accuracy.
+- Some custom editors may only partially restore.
+- Cross-origin iframe internals are not captured.
 
-## Local Setup
+## Privacy
 
-### 1) Install dependencies
+- All data stays local in `chrome.storage.local`.
+- No analytics, telemetry, or external backend.
+- No automatic sync outside your browser profile.
 
-```bash
-npm install
-```
+## Permissions explained
 
-### 2) Build TypeScript
+- `storage`: save snapshots locally.
+- `scripting`: inject capture/restore logic into the active page.
+- `activeTab`, `tabs`: read current tab context and target restore.
+- `downloads`: export JSON backups.
+- `host_permissions: <all_urls>`: allow operation on user-opened web pages.
+- `optional_permissions: unlimitedStorage`: optional larger local storage capacity.
 
-```bash
-npm run build
-```
+## Troubleshooting
 
-### 3) Load unpacked extension in Chrome
+- **Save does nothing**: ensure you are on `http(s)` page (not `chrome://` pages).
+- **Restore partly works**: page DOM changed; try restoring on the same URL/origin and after page settles.
+- **Import fails**: verify JSON contains `{ "snapshots": [] }` structure.
+- **No snapshots shown**: clear search/tag filters and retry.
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode**
-3. Click **Load unpacked**
-4. Select this project folder (`FormTimeMachine`)
-5. Pin **Page Versioner** from the extensions menu
+## TESTING (manual test cases)
 
-## Usage
+### TEST CASE 1: SAVE ON SIMPLE FORM PAGE
+1. Open a simple HTML form page.
+2. Enter values into text input + textarea.
+3. Select dropdown value.
+4. Check a checkbox.
+5. Click **Save Version**.
 
-1. Open a form-heavy page (LinkedIn profile edit, job portal form, etc.)
-2. Click extension icon
-3. Enter version label (optional)
-4. Click **Save Version**
-5. Later choose **Restore** on a version
-6. If URL differs, popup can navigate you to the saved URL first
+Expected:
+- Button changes to **Saving...** then **Saved**.
+- Snapshot stored and appears in list.
+- Card shows title, domain, timestamp, and tags.
+- Success status message appears.
 
-### LinkedIn workflow tips
+### TEST CASE 2: RESTORE ON SIMPLE FORM PAGE
+1. Modify fields after saving.
+2. Click **Restore** on the saved snapshot.
 
-- Save before switching tabs/sections in the profile editor
-- Restore after LinkedIn route transitions settle
-- If layout changed significantly, try restoring from the exact original URL
+Expected:
+- Fields revert to saved values.
+- Checkbox/select restore correctly.
+- Restore status summary appears.
 
-## Manual Test Checklist
+### TEST CASE 3: CONTENTEDITABLE RESTORE
+1. Open a page with a contenteditable region.
+2. Type text and save.
+3. Change text.
+4. Restore snapshot.
 
-1. Plain HTML form page:
-   - Save text inputs + textarea
-   - Modify values
-   - Restore and verify
-2. React SPA form:
-   - Save in route A
-   - Navigate in-app and back
-   - Restore with event-driven updates visible in UI
-3. LinkedIn-like profile edit flow:
-   - Save editable bio/summary state
-   - Restore after SPA navigation
-4. Checkbox/select restore:
-   - Save checked boxes + select option(s)
-   - Change and restore
-5. Contenteditable restore:
-   - Save editable block text
-   - Change and restore
-6. URL mismatch handling:
-   - Try restoring snapshot while on different path
-   - Confirm navigation prompt behavior
-7. Export/import:
-   - Export JSON
-   - Delete a version
-   - Import JSON
-   - Confirm version returns
-8. Blocked page behavior:
-   - Open `chrome://extensions`
-   - Attempt save
-   - Confirm readable error instead of crash
+Expected:
+- Contenteditable text restores correctly.
 
-## Permissions
+### TEST CASE 4: TAGS PARSING
+1. Save with tags: `LinkedIn, Summary, Draft-1, summary`.
 
-The manifest requests:
+Expected:
+- Tags normalize to: `linkedin`, `summary`, `draft-1`.
+- Duplicate `summary` removed.
+- Tags shown as chips.
 
-- `storage`, `scripting`, `activeTab`, `tabs`, `downloads`
-- optional `unlimitedStorage`
-- host permissions: `<all_urls>`
+### TEST CASE 5: SEARCH/FILTER
+1. Save multiple snapshots with different titles/tags/domains.
+2. Search by title/domain/tag.
 
-These are used for local snapshot persistence, script injection for capture/restore, tab context checks, and JSON export downloads.
+Expected:
+- Filtered list updates correctly.
+
+### TEST CASE 6: DELETE SNAPSHOT
+1. Delete one snapshot.
+
+Expected:
+- Snapshot disappears immediately.
+- Storage updates.
+
+### TEST CASE 7: EXPORT / IMPORT
+1. Export snapshots JSON.
+2. Delete snapshots.
+3. Import exported JSON.
+
+Expected:
+- Snapshots restored.
+- Duplicate IDs skipped.
+- Import summary message appears.
+
+### TEST CASE 8: BLOCKED PAGE
+1. Open `chrome://extensions`.
+2. Open popup.
+
+Expected:
+- UI shows page cannot be captured.
+- Save button disabled/safe.
+- No crash.
+
+### TEST CASE 9: LINKEDIN-LIKE SPA FLOW
+1. Open dynamic SPA page with form fields.
+2. Enter content and save.
+3. Change content.
+4. Restore.
+
+Expected:
+- Common fields restore.
+- Partial failures appear as warnings, not silent failure.
+
+### TEST CASE 10: URL / DOMAIN VISIBILITY
+1. Save snapshot on normal website.
+
+Expected:
+- Snapshot card clearly shows hostname/domain.
+- Card metadata shows path and has URL details.

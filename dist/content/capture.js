@@ -112,7 +112,7 @@ function captureElement(element, index) {
     }
     return null;
 }
-export function capturePageSnapshot(label, id, createdAt) {
+export function capturePageSnapshot(title, tags, id, createdAt) {
     const url = new URL(window.location.href);
     const candidates = Array.from(document.querySelectorAll("input, textarea, select, [contenteditable='true']"));
     const fields = candidates
@@ -127,7 +127,8 @@ export function capturePageSnapshot(label, id, createdAt) {
     };
     return {
         id,
-        label,
+        title,
+        tags,
         createdAt,
         pageTitle: document.title,
         url: window.location.href,

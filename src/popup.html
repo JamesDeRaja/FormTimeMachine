@@ -3,43 +3,65 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Page Versioner</title>
+    <title>FormTime Machine</title>
     <link rel="stylesheet" href="../styles/popup.css" />
   </head>
   <body>
     <main class="popup">
-      <header>
-        <h1>Page Versioner</h1>
-        <p id="pageMeta" class="muted">Loading current tab…</p>
-      </header>
+      <section class="card headerCard">
+        <h1>FormTime Machine</h1>
+        <p class="subtitle">Save and restore page versions</p>
+      </section>
 
-      <section class="saveSection">
-        <label for="labelInput">Version label</label>
+      <section class="card" id="currentPageCard">
+        <h2>Current page</h2>
+        <p id="currentPageTitle" class="pageTitle">Loading tab…</p>
+        <p id="currentPageDomain" class="muted">-</p>
+        <p id="currentPageUrl" class="muted mono">-</p>
+      </section>
+
+      <section class="card">
+        <h2>Save snapshot</h2>
+        <label for="titleInput">Title</label>
+        <input id="titleInput" type="text" maxlength="120" placeholder="e.g. Profile summary draft" />
+
+        <label for="tagsInput">Tags</label>
+        <input id="tagsInput" type="text" maxlength="200" placeholder="linkedin, profile, draft-2" />
+
         <div class="row">
-          <input id="labelInput" type="text" maxlength="120" placeholder="e.g. LinkedIn profile draft" />
-          <button id="saveBtn">Save Version</button>
+          <button id="saveBtn" class="primary">Save Version</button>
+          <button id="restoreLatestBtn" class="ghost">Restore Latest</button>
         </div>
-        <div class="row compact">
-          <button id="restoreLatestBtn" class="secondary">Restore Latest</button>
-          <input id="searchInput" type="search" placeholder="Search labels" />
+        <p id="saveStatus" class="inlineStatus" aria-live="polite"></p>
+      </section>
+
+      <section class="card">
+        <h2>Filter</h2>
+        <label for="searchInput">Search by title, domain, page title, or tag</label>
+        <input id="searchInput" type="search" placeholder="Search snapshots" />
+        <label for="tagFilterInput">Tag filter (optional)</label>
+        <input id="tagFilterInput" type="search" placeholder="Type a tag, e.g. linkedin" />
+        <div id="availableTags" class="tagRow"></div>
+      </section>
+
+      <section class="card">
+        <div class="sectionHeader">
+          <h2>Saved versions</h2>
+          <div class="row compact">
+            <button id="exportBtn" class="ghost">Export JSON</button>
+            <label class="ghost importLabel" for="importInput">Import JSON</label>
+            <input id="importInput" type="file" accept="application/json" hidden />
+          </div>
+        </div>
+
+        <div id="versionsList" class="versionsList"></div>
+        <div id="emptyState" class="emptyState" hidden>
+          <p>No saved versions for this page yet.</p>
+          <p class="muted">Save Version captures form fields and editable text so you can restore them later.</p>
         </div>
       </section>
 
-      <section>
-        <div class="row compact">
-          <button id="exportBtn" class="secondary">Export JSON</button>
-          <label class="importLabel secondary" for="importInput">Import JSON</label>
-          <input id="importInput" type="file" accept="application/json" hidden />
-        </div>
-      </section>
-
-      <section>
-        <h2>Saved Versions</h2>
-        <ul id="versionsList" class="versionsList"></ul>
-        <p id="emptyState" class="muted">No saved versions for this page yet.</p>
-      </section>
-
-      <p id="status" class="status" aria-live="polite"></p>
+      <p id="status" class="status info" aria-live="polite"></p>
     </main>
 
     <script type="module" src="../dist/popup.js"></script>

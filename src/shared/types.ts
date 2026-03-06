@@ -25,7 +25,8 @@ export type CapturedField = {
 
 export type PageSnapshot = {
   id: string;
-  label: string;
+  title: string;
+  tags: string[];
   createdAt: string;
   pageTitle: string;
   url: string;
@@ -57,4 +58,15 @@ export type ActivePageContext = {
   origin: string;
   path: string;
   hostname: string;
+};
+
+export type PopupState = {
+  currentTab?: ActivePageContext;
+  snapshots: PageSnapshot[];
+  filteredSnapshots: PageSnapshot[];
+  isSaving: boolean;
+  activeRestoreId?: string;
+  searchQuery: string;
+  selectedTag?: string | null;
+  status?: { type: "info" | "success" | "warning" | "error"; message: string };
 };

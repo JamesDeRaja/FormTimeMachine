@@ -1,4 +1,4 @@
-import type { CapturedField, PageSnapshot, RestoreReport } from "../shared/types";
+import type { CapturedField, PageSnapshot, RestoreReport } from "../shared/types.js";
 
 function dispatchFieldEvents(element: HTMLElement): void {
   element.dispatchEvent(new Event("input", { bubbles: true }));
