@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page Versioner</title>
+    <link rel="stylesheet" href="../styles/popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header>
+        <h1>Page Versioner</h1>
+        <p id="pageMeta" class="muted">Loading current tab…</p>
+      </header>
+
+      <section class="saveSection">
+        <label for="labelInput">Version label</label>
+        <div class="row">
+          <input id="labelInput" type="text" maxlength="120" placeholder="e.g. LinkedIn profile draft" />
+          <button id="saveBtn">Save Version</button>
+        </div>
+        <div class="row compact">
+          <button id="restoreLatestBtn" class="secondary">Restore Latest</button>
+          <input id="searchInput" type="search" placeholder="Search labels" />
+        </div>
+      </section>
+
+      <section>
+        <div class="row compact">
+          <button id="exportBtn" class="secondary">Export JSON</button>
+          <label class="importLabel secondary" for="importInput">Import JSON</label>
+          <input id="importInput" type="file" accept="application/json" hidden />
+        </div>
+      </section>
+
+      <section>
+        <h2>Saved Versions</h2>
+        <ul id="versionsList" class="versionsList"></ul>
+        <p id="emptyState" class="muted">No saved versions for this page yet.</p>
+      </section>
+
+      <p id="status" class="status" aria-live="polite"></p>
+    </main>
+
+    <script type="module" src="../dist/popup.js"></script>
+  </body>
+</html>

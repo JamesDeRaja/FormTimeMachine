@@ -1,0 +1,128 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 380px;
+  background: #0d1117;
+  color: #e6edf3;
+}
+
+.popup {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: 16px;
+}
+
+h2 {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.row.compact {
+  margin-top: 8px;
+}
+
+input[type="text"],
+input[type="search"] {
+  flex: 1;
+  border: 1px solid #3d444d;
+  background: #161b22;
+  color: inherit;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+button,
+.importLabel {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 10px;
+  background: #2f81f7;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+}
+
+button.secondary,
+.importLabel.secondary {
+  background: #21262d;
+  border-color: #3d444d;
+}
+
+button.danger {
+  background: #8b2a2a;
+}
+
+.muted {
+  color: #9da7b3;
+  font-size: 12px;
+}
+
+.versionsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.versionItem {
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.versionItem .info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 220px;
+  overflow: hidden;
+}
+
+.versionItem .info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status {
+  margin: 0;
+  min-height: 18px;
+  font-size: 12px;
+}
+
+.status.error {
+  color: #ff7b72;
+}

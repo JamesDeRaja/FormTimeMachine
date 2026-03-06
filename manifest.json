@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Page Versioner",
+  "description": "Save and restore page form versions locally.",
+  "version": "1.0.0",
+  "permissions": ["storage", "scripting", "activeTab", "tabs", "downloads"],
+  "optional_permissions": ["unlimitedStorage"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "Page Versioner",
+    "default_popup": "src/popup.html"
+  },
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "commands": {
+    "quick-save": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Quick save current page snapshot"
+    }
+  }
+}
