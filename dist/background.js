@@ -1,10 +1,10 @@
-import { capturePageSnapshot } from "./content/capture";
-import { restorePageSnapshot } from "./content/restore";
-import { loadSnapshots, removeSnapshot, upsertSnapshot } from "./shared/storage";
-import { generateId, pathSimilarity } from "./shared/utils";
+import { capturePageSnapshot } from "./content/capture.js";
+import { restorePageSnapshot } from "./content/restore.js";
+import { loadSnapshots, removeSnapshot, upsertSnapshot } from "./shared/storage.js";
+import { generateId, isSupportedUrl } from "./shared/utils.js";
 async function getActiveTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || !tab.id || !tab.url) {
+    if (!tab?.id || !tab.url) {
         throw new Error("No active tab found.");
     }
     return tab;
@@ -23,19 +23,18 @@ function toContext(tab) {
         hostname: url.hostname
     };
 }
-function filterSnapshotsForContext(snapshots, context) {
-    return snapshots
-        .filter((snapshot) => snapshot.origin === context.origin)
-        .filter((snapshot) => pathSimilarity(snapshot.path, context.path) >= 0.3)
-        .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
-}
-async function updateBadgeForTab(tabId, context) {
+async function updateBadgeForTab(tabId) {
     try {
-        const tabContext = context ?? toContext(await chrome.tabs.get(tabId));
+        const tab = await chrome.tabs.get(tabId);
+        if (!tab.url || !isSupportedUrl(tab.url)) {
+            await chrome.action.setBadgeText({ tabId, text: "" });
+            return;
+        }
+        const context = toContext(tab);
         const snapshots = await loadSnapshots();
-        const relevant = filterSnapshotsForContext(snapshots, tabContext);
+        const relevant = snapshots.filter((snapshot) => snapshot.hostname === context.hostname);
         await chrome.action.setBadgeText({ tabId, text: relevant.length ? String(Math.min(relevant.length, 99)) : "" });
-        await chrome.action.setBadgeBackgroundColor({ tabId, color: "#1f6feb" });
+        await chrome.action.setBadgeBackgroundColor({ tabId, color: "#2563eb" });
     }
     catch {
         await chrome.action.setBadgeText({ tabId, text: "" });
@@ -43,13 +42,15 @@ async function updateBadgeForTab(tabId, context) {
 }
 async function quickSaveActiveTab() {
     const tab = await getActiveTab();
-    const label = `Quick Save ${new Date().toLocaleString()}`;
+    if (!tab.url || !isSupportedUrl(tab.url)) {
+        throw new Error("This page cannot be captured by Chrome extensions.");
+    }
     const id = generateId();
     const createdAt = new Date().toISOString();
     const [result] = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: capturePageSnapshot,
-        args: [label, id, createdAt]
+        args: [tab.title || "Untitled Snapshot", ["quick-save"], id, createdAt]
     });
     if (!result?.result) {
         throw new Error("Could not capture page state.");
@@ -64,7 +65,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         await quickSaveActiveTab();
     }
     catch {
-        // Keep keyboard shortcut failure silent to avoid noisy UX.
+        // keyboard shortcut failures remain silent
     }
 });
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
@@ -84,16 +85,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
         if (message.type === "LIST_SNAPSHOTS") {
             const snapshots = await loadSnapshots();
-            sendResponse({ ok: true, data: filterSnapshotsForContext(snapshots, message.context) });
+            sendResponse({ ok: true, data: snapshots });
             return;
         }
         if (message.type === "SAVE_SNAPSHOT") {
+            const tab = await chrome.tabs.get(message.tabId);
+            if (!tab.url || !isSupportedUrl(tab.url)) {
+                throw new Error("This page cannot be captured by Chrome extensions.");
+            }
             const id = generateId();
             const createdAt = new Date().toISOString();
             const [result] = await chrome.scripting.executeScript({
                 target: { tabId: message.tabId },
                 func: capturePageSnapshot,
-                args: [message.label, id, createdAt]
+                args: [message.title, message.tags, id, createdAt]
             });
             if (!result?.result) {
                 throw new Error("Capture failed on this page.");

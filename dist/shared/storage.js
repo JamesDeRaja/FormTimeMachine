@@ -1,12 +1,43 @@
-import { SNAPSHOT_LIMIT } from "./utils";
+import { SNAPSHOT_LIMIT } from "./utils.js";
 const STORAGE_KEY = "snapshots";
+function sanitizeSnapshot(raw) {
+    if (!raw || typeof raw !== "object" || typeof raw.id !== "string") {
+        return null;
+    }
+    const tags = Array.isArray(raw.tags)
+        ? raw.tags.filter((tag) => typeof tag === "string").map((tag) => tag.toLowerCase().trim()).filter(Boolean)
+        : [];
+    return {
+        id: raw.id,
+        title: typeof raw.title === "string" && raw.title.trim() ? raw.title : raw.label || "Untitled Snapshot",
+        tags: Array.from(new Set(tags)),
+        createdAt: typeof raw.createdAt === "string" ? raw.createdAt : new Date().toISOString(),
+        pageTitle: typeof raw.pageTitle === "string" ? raw.pageTitle : "Untitled Page",
+        url: typeof raw.url === "string" ? raw.url : "",
+        origin: typeof raw.origin === "string" ? raw.origin : "",
+        path: typeof raw.path === "string" ? raw.path : "/",
+        hostname: typeof raw.hostname === "string" ? raw.hostname : "",
+        scrollX: typeof raw.scrollX === "number" ? raw.scrollX : 0,
+        scrollY: typeof raw.scrollY === "number" ? raw.scrollY : 0,
+        domFingerprint: raw.domFingerprint || {
+            title: typeof raw.pageTitle === "string" ? raw.pageTitle : "",
+            inputCount: 0,
+            textareaCount: 0,
+            selectCount: 0,
+            contentEditableCount: 0
+        },
+        fields: Array.isArray(raw.fields) ? raw.fields : []
+    };
+}
 export async function loadSnapshots() {
     const result = await chrome.storage.local.get(STORAGE_KEY);
     const snapshots = result[STORAGE_KEY];
     if (!Array.isArray(snapshots)) {
         return [];
     }
-    return snapshots;
+    return snapshots
+        .map((snapshot) => sanitizeSnapshot(snapshot))
+        .filter((snapshot) => !!snapshot);
 }
 export async function saveSnapshots(snapshots) {
     await chrome.storage.local.set({ [STORAGE_KEY]: snapshots });

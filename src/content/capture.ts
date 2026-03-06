@@ -1,4 +1,4 @@
-import type { CapturedField, DomFingerprint, PageSnapshot } from "../shared/types";
+import type { CapturedField, DomFingerprint, PageSnapshot } from "../shared/types.js";
 
 function cssEscape(value: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
@@ -130,7 +130,7 @@ function captureElement(element: Element, index: number): CapturedField | null {
   return null;
 }
 
-export function capturePageSnapshot(label: string, id: string, createdAt: string): Omit<PageSnapshot, "origin" | "path" | "hostname"> & {
+export function capturePageSnapshot(title: string, tags: string[], id: string, createdAt: string): Omit<PageSnapshot, "origin" | "path" | "hostname"> & {
   origin: string;
   path: string;
   hostname: string;
@@ -154,7 +154,8 @@ export function capturePageSnapshot(label: string, id: string, createdAt: string
 
   return {
     id,
-    label,
+    title,
+    tags,
     createdAt,
     pageTitle: document.title,
     url: window.location.href,

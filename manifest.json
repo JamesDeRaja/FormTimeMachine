@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Page Versioner",
+  "name": "FormTime Machine",
   "description": "Save and restore page form versions locally.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "permissions": ["storage", "scripting", "activeTab", "tabs", "downloads"],
   "optional_permissions": ["unlimitedStorage"],
   "host_permissions": ["<all_urls>"],
   "action": {
-    "default_title": "Page Versioner",
+    "default_title": "FormTime Machine",
     "default_popup": "src/popup.html"
   },
   "background": {

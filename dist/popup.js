@@ -1,197 +1,337 @@
-import { dedupeSnapshots, loadSnapshots, saveSnapshots } from "./shared/storage";
-import { formatDateTime, pathSimilarity, summarizeUrl } from "./shared/utils";
-const pageMeta = document.getElementById("pageMeta");
-const labelInput = document.getElementById("labelInput");
+import { dedupeSnapshots, loadSnapshots, saveSnapshots } from "./shared/storage.js";
+import { filterSnapshots, formatDateTime, formatTimestamp, isSupportedUrl, normalizeTags, summarizeUrl } from "./shared/utils.js";
+const titleInput = document.getElementById("titleInput");
+const tagsInput = document.getElementById("tagsInput");
 const saveBtn = document.getElementById("saveBtn");
 const restoreLatestBtn = document.getElementById("restoreLatestBtn");
+const searchInput = document.getElementById("searchInput");
+const tagFilterInput = document.getElementById("tagFilterInput");
+const availableTags = document.getElementById("availableTags");
 const versionsList = document.getElementById("versionsList");
 const emptyState = document.getElementById("emptyState");
 const statusEl = document.getElementById("status");
+const saveStatus = document.getElementById("saveStatus");
 const exportBtn = document.getElementById("exportBtn");
 const importInput = document.getElementById("importInput");
-const searchInput = document.getElementById("searchInput");
-let currentContext = null;
-let currentSnapshots = [];
+const currentPageTitle = document.getElementById("currentPageTitle");
+const currentPageDomain = document.getElementById("currentPageDomain");
+const currentPageUrl = document.getElementById("currentPageUrl");
+const state = {
+    snapshots: [],
+    filteredSnapshots: [],
+    isSaving: false,
+    searchQuery: "",
+    selectedTag: null
+};
 async function sendMessage(message) {
     return chrome.runtime.sendMessage(message);
 }
-function setStatus(message, isError = false) {
+function setStatus(type, message) {
+    state.status = { type, message };
+    statusEl.className = `status ${type}`;
     statusEl.textContent = message;
-    statusEl.classList.toggle("error", isError);
 }
-function renderSnapshots() {
-    const query = searchInput.value.trim().toLowerCase();
-    const snapshots = query
-        ? currentSnapshots.filter((snapshot) => snapshot.label.toLowerCase().includes(query))
-        : currentSnapshots;
-    versionsList.innerHTML = "";
-    emptyState.style.display = snapshots.length ? "none" : "block";
-    for (const snapshot of snapshots) {
-        const li = document.createElement("li");
-        li.className = "versionItem";
-        const info = document.createElement("div");
-        info.className = "info";
-        info.innerHTML = `
-      <strong>${snapshot.label}</strong>
-      <span>${formatDateTime(snapshot.createdAt)}</span>
-      <span class="muted">${snapshot.fields.length} fields</span>
-    `;
-        const controls = document.createElement("div");
-        controls.className = "controls";
-        const restoreBtn = document.createElement("button");
-        restoreBtn.textContent = "Restore";
-        restoreBtn.addEventListener("click", () => void handleRestore(snapshot));
-        const deleteBtn = document.createElement("button");
-        deleteBtn.textContent = "Delete";
-        deleteBtn.className = "danger";
-        deleteBtn.addEventListener("click", () => void handleDelete(snapshot.id));
-        controls.append(restoreBtn, deleteBtn);
-        li.append(info, controls);
-        versionsList.append(li);
+function setSaveButtonState(mode) {
+    if (mode === "saving") {
+        saveBtn.textContent = "Saving...";
+        saveBtn.disabled = true;
+        return;
     }
+    if (mode === "success") {
+        saveBtn.textContent = "Saved";
+        saveBtn.disabled = false;
+        window.setTimeout(() => setSaveButtonState("idle"), 1000);
+        return;
+    }
+    if (mode === "failure") {
+        saveBtn.textContent = "Failed";
+        saveBtn.disabled = false;
+        window.setTimeout(() => setSaveButtonState("idle"), 1200);
+        return;
+    }
+    saveBtn.textContent = "Save Version";
+    saveBtn.disabled = state.isSaving || !state.currentTab || !isSupportedUrl(state.currentTab.url);
 }
 function describeRestoreReport(report) {
     const warningText = report.warnings.length ? ` Warnings: ${report.warnings.slice(0, 2).join("; ")}` : "";
-    return `Restored ${report.restoredCount}/${report.totalFields}. Missing ${report.missingCount}, skipped ${report.skippedCount}.${warningText}`;
+    return `Restore complete: ${report.restoredCount}/${report.totalFields} fields restored (${report.missingCount} missing, ${report.skippedCount} skipped).${warningText}`;
 }
-async function refreshSnapshots() {
-    if (!currentContext)
+function collectFilterTags(snapshots) {
+    const tags = new Set();
+    snapshots.forEach((snapshot) => snapshot.tags.forEach((tag) => tags.add(tag)));
+    return Array.from(tags).sort();
+}
+function renderTagFilterChips() {
+    const tags = collectFilterTags(state.snapshots);
+    availableTags.innerHTML = "";
+    if (!tags.length)
         return;
-    const response = await sendMessage({
-        type: "LIST_SNAPSHOTS",
-        context: currentContext
-    });
-    if (!response.ok) {
-        setStatus(response.error, true);
-        return;
+    for (const tag of tags) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `tag ${state.selectedTag === tag ? "active" : ""}`;
+        chip.textContent = tag;
+        chip.addEventListener("click", () => {
+            state.selectedTag = state.selectedTag === tag ? null : tag;
+            tagFilterInput.value = state.selectedTag ?? "";
+            applyFiltersAndRender();
+        });
+        availableTags.append(chip);
     }
-    currentSnapshots = response.data;
+}
+function createTagPills(tags) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "tagRow";
+    if (!tags.length) {
+        const empty = document.createElement("span");
+        empty.className = "muted";
+        empty.textContent = "no tags";
+        wrapper.append(empty);
+        return wrapper;
+    }
+    tags.forEach((tag) => {
+        const el = document.createElement("span");
+        el.className = "tag";
+        el.textContent = tag;
+        wrapper.append(el);
+    });
+    return wrapper;
+}
+function renderSnapshots() {
+    versionsList.innerHTML = "";
+    emptyState.hidden = state.filteredSnapshots.length > 0;
+    for (const snapshot of state.filteredSnapshots) {
+        const card = document.createElement("article");
+        card.className = "snapshotCard";
+        const head = document.createElement("div");
+        head.className = "snapshotHead";
+        const left = document.createElement("div");
+        left.innerHTML = `
+      <div class="snapshotTitle">${snapshot.title}</div>
+      <div class="snapshotMeta">${snapshot.hostname} · ${formatTimestamp(snapshot.createdAt)}</div>
+      <div class="snapshotMeta" title="${snapshot.url}">${snapshot.path || "/"} · ${snapshot.fields.length} fields</div>
+    `;
+        const right = document.createElement("div");
+        right.className = "snapshotMeta";
+        right.textContent = formatDateTime(snapshot.createdAt);
+        head.append(left, right);
+        const tags = createTagPills(snapshot.tags);
+        const controls = document.createElement("div");
+        controls.className = "controls";
+        const restoreBtn = document.createElement("button");
+        restoreBtn.className = "ghost";
+        const restoring = state.activeRestoreId === snapshot.id;
+        restoreBtn.textContent = restoring ? "Restoring..." : "Restore";
+        restoreBtn.disabled = restoring || state.isSaving;
+        restoreBtn.addEventListener("click", () => void handleRestore(snapshot));
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "ghost";
+        deleteBtn.textContent = "Delete";
+        deleteBtn.addEventListener("click", () => void handleDelete(snapshot.id));
+        controls.append(restoreBtn, deleteBtn);
+        if (state.currentTab && state.currentTab.origin === snapshot.origin && state.currentTab.url !== snapshot.url) {
+            const warn = document.createElement("p");
+            warn.className = "warn";
+            warn.textContent = "URL differs from where this snapshot was saved. Restore may be partial.";
+            card.append(head, tags, warn, controls);
+        }
+        else {
+            card.append(head, tags, controls);
+        }
+        versionsList.append(card);
+    }
+}
+function applyFiltersAndRender() {
+    state.filteredSnapshots = filterSnapshots(state.snapshots, state.currentTab ? { hostname: state.currentTab.hostname, path: state.currentTab.path } : undefined, state.searchQuery, state.selectedTag);
+    renderTagFilterChips();
     renderSnapshots();
 }
-async function init() {
-    const response = await sendMessage({ type: "GET_ACTIVE_CONTEXT" });
+async function refreshSnapshots() {
+    const response = await sendMessage({ type: "LIST_SNAPSHOTS" });
     if (!response.ok) {
-        setStatus(response.error, true);
-        pageMeta.textContent = "Could not read current tab.";
+        setStatus("error", response.error);
         return;
     }
-    currentContext = response.data;
-    pageMeta.textContent = `${currentContext.title} — ${summarizeUrl(currentContext.url)}`;
-    await refreshSnapshots();
+    state.snapshots = dedupeSnapshots(response.data);
+    applyFiltersAndRender();
+}
+function updateCurrentPageCard(tab) {
+    currentPageTitle.textContent = tab.title;
+    currentPageDomain.textContent = tab.hostname;
+    currentPageUrl.textContent = summarizeUrl(tab.url);
 }
 async function handleSave() {
-    if (!currentContext)
+    if (!state.currentTab)
         return;
-    const label = labelInput.value.trim() || `Version ${new Date().toLocaleString()}`;
-    const response = await sendMessage({
-        type: "SAVE_SNAPSHOT",
-        tabId: currentContext.tabId,
-        label
-    });
-    if (!response.ok) {
-        setStatus(response.error, true);
+    if (!isSupportedUrl(state.currentTab.url)) {
+        setStatus("warning", "This page cannot be captured by Chrome extensions.");
         return;
     }
-    setStatus(`Saved “${label}”.`);
-    labelInput.value = "";
-    await refreshSnapshots();
-}
-async function handleDelete(snapshotId) {
-    const response = await sendMessage({ type: "DELETE_SNAPSHOT", snapshotId });
-    if (!response.ok) {
-        setStatus(response.error, true);
-        return;
+    state.isSaving = true;
+    setSaveButtonState("saving");
+    saveStatus.className = "inlineStatus info";
+    saveStatus.textContent = "Saving snapshot...";
+    try {
+        const tags = normalizeTags(tagsInput.value);
+        const title = titleInput.value.trim() || state.currentTab.title || "Untitled Snapshot";
+        const response = await sendMessage({
+            type: "SAVE_SNAPSHOT",
+            tabId: state.currentTab.tabId,
+            title,
+            tags
+        });
+        if (!response.ok) {
+            throw new Error(response.error);
+        }
+        await refreshSnapshots();
+        saveStatus.className = "inlineStatus success";
+        saveStatus.textContent = "Snapshot saved.";
+        setStatus("success", `Saved “${title}” on ${response.data.hostname}.`);
+        titleInput.value = "";
+        setSaveButtonState("success");
     }
-    setStatus("Version deleted.");
-    await refreshSnapshots();
+    catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to save snapshot.";
+        saveStatus.className = "inlineStatus error";
+        saveStatus.textContent = message;
+        setStatus("error", message);
+        setSaveButtonState("failure");
+    }
+    finally {
+        state.isSaving = false;
+        window.setTimeout(() => setSaveButtonState("idle"), 20);
+    }
 }
 async function handleRestore(snapshot) {
-    if (!currentContext)
+    if (!state.currentTab)
         return;
-    if (new URL(currentContext.url).origin !== snapshot.origin) {
-        setStatus("Snapshot origin does not match current tab origin.", true);
+    if (snapshot.origin !== state.currentTab.origin) {
+        setStatus("warning", "Snapshot origin does not match the current page origin.");
         return;
     }
-    if (currentContext.url !== snapshot.url) {
-        const shouldNavigate = window.confirm("Current URL differs from saved snapshot URL. Open saved URL first?");
-        if (shouldNavigate) {
-            await chrome.tabs.update(currentContext.tabId, { url: snapshot.url });
-            setStatus("Navigating to saved URL. Re-open popup and restore again.");
-            return;
+    state.activeRestoreId = snapshot.id;
+    renderSnapshots();
+    try {
+        const response = await sendMessage({
+            type: "RESTORE_SNAPSHOT",
+            tabId: state.currentTab.tabId,
+            snapshot
+        });
+        if (!response.ok) {
+            throw new Error(response.error);
         }
+        setStatus("success", describeRestoreReport(response.data));
     }
-    const response = await sendMessage({
-        type: "RESTORE_SNAPSHOT",
-        tabId: currentContext.tabId,
-        snapshot
-    });
+    catch (error) {
+        setStatus("error", error instanceof Error ? error.message : "Restore failed.");
+    }
+    finally {
+        state.activeRestoreId = undefined;
+        renderSnapshots();
+    }
+}
+async function handleDelete(snapshotId) {
+    const shouldDelete = window.confirm("Delete this snapshot?");
+    if (!shouldDelete)
+        return;
+    const response = await sendMessage({ type: "DELETE_SNAPSHOT", snapshotId });
     if (!response.ok) {
-        setStatus(response.error, true);
+        setStatus("error", response.error);
         return;
     }
-    setStatus(describeRestoreReport(response.data));
+    state.snapshots = response.data;
+    applyFiltersAndRender();
+    setStatus("success", "Snapshot deleted.");
 }
 async function handleRestoreLatest() {
-    if (!currentSnapshots.length || !currentContext) {
-        setStatus("No snapshots available for this page.", true);
+    if (!state.filteredSnapshots.length) {
+        setStatus("warning", "No snapshots available to restore.");
         return;
     }
-    const latest = [...currentSnapshots].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
-    await handleRestore(latest);
+    await handleRestore(state.filteredSnapshots[0]);
 }
 async function handleExport() {
+    setStatus("info", "Exporting snapshots...");
     const snapshots = await loadSnapshots();
-    const blob = new Blob([JSON.stringify({ snapshots }, null, 2)], { type: "application/json" });
+    const payload = JSON.stringify({ snapshots }, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
+    const date = new Date().toISOString().slice(0, 10);
     await chrome.downloads.download({
         url,
-        filename: `page-versioner-export-${Date.now()}.json`,
+        filename: `formtime-machine-backup-${date}.json`,
         saveAs: true
     });
     window.setTimeout(() => URL.revokeObjectURL(url), 5000);
-    setStatus("Export started.");
+    setStatus("success", "Export started.");
 }
 function isSnapshotLike(value) {
     if (typeof value !== "object" || value === null)
         return false;
     const snapshot = value;
     return (typeof snapshot.id === "string" &&
-        typeof snapshot.label === "string" &&
+        (typeof snapshot.title === "string" || typeof snapshot.label === "string") &&
         typeof snapshot.createdAt === "string" &&
         typeof snapshot.url === "string" &&
         Array.isArray(snapshot.fields));
 }
 async function handleImport(file) {
+    setStatus("info", "Importing snapshots...");
     const raw = await file.text();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed.snapshots)) {
-        throw new Error("Invalid import file: snapshots array missing.");
+        throw new Error("Invalid import JSON: snapshots array missing.");
     }
     const incoming = parsed.snapshots.filter(isSnapshotLike);
     const existing = await loadSnapshots();
     const merged = dedupeSnapshots([...incoming, ...existing]);
     await saveSnapshots(merged);
-    if (currentContext) {
-        const ctx = currentContext;
-        currentSnapshots = merged
-            .filter((snapshot) => snapshot.origin === ctx.origin)
-            .filter((snapshot) => pathSimilarity(snapshot.path, ctx.path) >= 0.3)
-            .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+    state.snapshots = merged;
+    applyFiltersAndRender();
+    const duplicateCount = incoming.length + existing.length - merged.length;
+    setStatus("success", `Imported ${incoming.length} snapshots (${duplicateCount} duplicates skipped).`);
+}
+async function init() {
+    try {
+        const response = await sendMessage({ type: "GET_ACTIVE_CONTEXT" });
+        if (!response.ok) {
+            throw new Error(response.error);
+        }
+        state.currentTab = response.data;
+        updateCurrentPageCard(response.data);
+        if (!isSupportedUrl(response.data.url)) {
+            saveBtn.disabled = true;
+            saveStatus.className = "inlineStatus warning";
+            saveStatus.textContent = "This page cannot be captured by Chrome extensions.";
+            setStatus("warning", "Unsupported page. Use an http(s) website.");
+        }
+        await refreshSnapshots();
     }
-    renderSnapshots();
-    setStatus(`Imported ${incoming.length} snapshots.`);
+    catch (error) {
+        setStatus("error", error instanceof Error ? error.message : "Failed to initialize popup.");
+        currentPageTitle.textContent = "Could not load current tab";
+        saveBtn.disabled = true;
+    }
+    setSaveButtonState("idle");
 }
 saveBtn.addEventListener("click", () => void handleSave());
 restoreLatestBtn.addEventListener("click", () => void handleRestoreLatest());
 exportBtn.addEventListener("click", () => void handleExport());
-searchInput.addEventListener("input", () => renderSnapshots());
+searchInput.addEventListener("input", () => {
+    state.searchQuery = searchInput.value;
+    applyFiltersAndRender();
+});
+tagFilterInput.addEventListener("input", () => {
+    const value = tagFilterInput.value.trim().toLowerCase();
+    state.selectedTag = value || null;
+    applyFiltersAndRender();
+});
 importInput.addEventListener("change", () => {
     const file = importInput.files?.[0];
     if (!file)
         return;
     void handleImport(file).catch((error) => {
-        const message = error instanceof Error ? error.message : "Import failed.";
-        setStatus(message, true);
+        setStatus("error", error instanceof Error ? error.message : "Import failed.");
     });
 });
 void init();
